@@ -47,8 +47,6 @@
 #   - https://www.exploit-db.com/docs/english/18244-active-domain-offline-hash-dump-&-forensic-analysis.pdf
 #   - https://www.passcape.com/index.php?section=blog&cmd=details&id=15
 #
-from __future__ import division
-from __future__ import print_function
 import codecs
 import json
 import hashlib
@@ -3464,7 +3462,7 @@ class NTDSHashes:
                     if outputFile is not None:
                         self.__writeOutput(outputFile, line + '\n')
                     count += 1
-                if previousSecret:
+                if previousSecret and self.__history:
                     for line in _format_trust_secrets(partner, previousSecret, self.__domainFQDN, isIncoming, previous=True, justNTLM=self.__justNTLM):
                         self.__perSecretCallback(NTDSHashes.SECRET_TYPE.NTDS, line)
                         if outputFile is not None:
@@ -3563,7 +3561,7 @@ class NTDSHashes:
                     self.__perSecretCallback(NTDSHashes.SECRET_TYPE.NTDS, line)
                     if outputFile is not None:
                         self.__writeOutput(outputFile, line + '\n')
-            if previousSecret:
+            if previousSecret and self.__history:
                 for line in _format_trust_secrets(partner, previousSecret, domain, isIncoming, previous=True, justNTLM=self.__justNTLM):
                     self.__perSecretCallback(NTDSHashes.SECRET_TYPE.NTDS, line)
                     if outputFile is not None:
@@ -3573,6 +3571,7 @@ class NTDSHashes:
         hashesOutputFile = None
         keysOutputFile = None
         clearTextOutputFile = None
+        trustOutputFile = None
         skipUsers = []
 
         if self.__skipUser:
@@ -3622,6 +3621,10 @@ class NTDSHashes:
                 if self.__justNTLM is False:
                     keysOutputFile = openFile(self.__outputFileName+'.ntds.kerberos',mode)
                     clearTextOutputFile = openFile(self.__outputFileName+'.ntds.cleartext',mode)
+                if self.__trustKeys:
+                    # Trust keys are not account secrets and do not follow the pwdump line
+                    # format, so they get their own file to keep .ntds parseable.
+                    trustOutputFile = openFile(self.__outputFileName+'.ntds.trustkeys',mode)
 
             if not self.__justTrustKeys:
                 LOG.info('Dumping Domain Credentials (domain\\uid:rid:lmhash:nthash)')
@@ -3694,7 +3697,7 @@ class NTDSHashes:
 
                     if self.__trustKeys:
                         try:
-                            self.__dumpTrustKeysOffline(outputFile=hashesOutputFile)
+                            self.__dumpTrustKeysOffline(outputFile=trustOutputFile)
                         except Exception as e:
                             LOG.debug('Exception', exc_info=True)
                             LOG.error('Trusted domain key dump failed: %s' % str(e))
@@ -3901,7 +3904,7 @@ class NTDSHashes:
             # from the .dit inside the branch above instead.
             if self.__trustKeys and not self.__useVSSMethod and not self.__remoteSSMethodWMINTDS:
                 try:
-                    self.__dumpTrustKeysOnline(outputFile=hashesOutputFile)
+                    self.__dumpTrustKeysOnline(outputFile=trustOutputFile)
                 except Exception as e:
                     LOG.debug('Exception', exc_info=True)
                     LOG.error('Trusted domain key dump failed: %s' % str(e))
@@ -3915,6 +3918,9 @@ class NTDSHashes:
 
             if clearTextOutputFile is not None:
                 clearTextOutputFile.close()
+
+            if trustOutputFile is not None:
+                trustOutputFile.close()
 
             self.__resumeSession.endTransaction()
 
